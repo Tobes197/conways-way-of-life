@@ -1,0 +1,253 @@
+from IPython.display import HTML, display
+
+# HTML + CSS + JS kód pro mobilní/webovou aplikaci Hry života
+html_code = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e2e;
+            color: #cdd6f4;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 10px;
+            touch-action: manipulation;
+        }
+        h1 {
+            margin: 5px 0 10px 0;
+            font-size: 1.5rem;
+            color: #89b4fa;
+        }
+        #controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            margin-bottom: 12px;
+            width: 100%;
+            max-width: 500px;
+        }
+        button {
+            background-color: #45475a;
+            color: #cdd6f4;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+            user-select: none;
+        }
+        button:hover {
+            background-color: #585b70;
+        }
+        #startBtn.running {
+            background-color: #f38ba8;
+            color: #11111b;
+        }
+        #startBtn:not(.running) {
+            background-color: #a6e3a1;
+            color: #11111b;
+        }
+        #grid-container {
+            border: 2px solid #313244;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #11111b;
+            touch-action: none; /* Zabránění scrollování při kreslení na mobilu */
+        }
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+        #info {
+            margin-top: 8px;
+            font-size: 0.85rem;
+            color: #a6adc8;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Conway's Game of Life</h1>
+    
+    <div id="controls">
+        <button id="startBtn">Spustit</button>
+        <button id="stepBtn">Krok</button>
+        <button id="clearBtn">Vyčistit</button>
+        <button id="randomBtn">Náhodně</button>
+    </div>
+
+    <div id="grid-container">
+        <canvas id="lifeCanvas"></canvas>
+    </div>
+
+    <div id="info">
+        Generace: <span id="generationCount">0</span> | Živé buňky: <span id="aliveCount">0</span>
+    </div>
+
+    <script>
+        const ROWS = 50;
+        const COLS = 50;
+        let CELL_SIZE = Math.min((window.innerWidth - 30) / COLS, 10);
+        if (CELL_SIZE < 6) CELL_SIZE = 6;
+        if (CELL_SIZE > 15) CELL_SIZE = 12;
+
+        const canvas = document.getElementById('lifeCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = COLS * CELL_SIZE;
+        canvas.height = ROWS * CELL_SIZE;
+
+        let grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
+        let isRunning = false;
+        let generation = 0;
+        let intervalId = null;
+        let isDrawing = false;
+        let drawMode = 1; // 1 pro oživení, 0 pro smazání
+
+        function drawGrid() {
+            ctx.fillStyle = '#11111b';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            let alive = 0;
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (grid[r][c] === 1) {
+                        ctx.fillStyle = '#89b4fa';
+                        ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE - 1, CELL_SIZE - 1);
+                        alive++;
+                    } else {
+                        ctx.fillStyle = '#181825';
+                        ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE - 1, CELL_SIZE - 1);
+                    }
+                }
+            }
+            document.getElementById('aliveCount').innerText = alive;
+            document.getElementById('generationCount').innerText = generation;
+        }
+
+        function computeNext() {
+            let next = grid.map(arr => [...arr]);
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    let neighbors = 0;
+                    for (let i = -1; i <= 1; i++) {
+                        for (let j = -1; j <= 1; j++) {
+                            if (i === 0 && j === 0) continue;
+                            let nr = (r + i + ROWS) % ROWS;
+                            let nc = (c + j + COLS) % COLS;
+                            neighbors += grid[nr][nc];
+                        }
+                    }
+
+                    if (grid[r][c] === 1) {
+                        if (neighbors < 2 || neighbors > 3) next[r][c] = 0;
+                    } else {
+                        if (neighbors === 3) next[r][c] = 1;
+                    }
+                }
+            }
+            grid = next;
+            generation++;
+            drawGrid();
+        }
+
+        function toggleCell(x, y) {
+            const rect = canvas.getBoundingClientRect();
+            const c = Math.floor((x - rect.left) / CELL_SIZE);
+            const r = Math.floor((y - rect.top) / CELL_SIZE);
+            if (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
+                grid[r][c] = drawMode;
+                drawGrid();
+            }
+        }
+
+        // Myš events
+        canvas.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            const c = Math.floor((e.clientX - rect.left) / CELL_SIZE);
+            const r = Math.floor((e.clientY - rect.top) / CELL_SIZE);
+            if (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
+                drawMode = grid[r][c] ? 0 : 1;
+                grid[r][c] = drawMode;
+            }
+            toggleCell(e.clientX, e.clientY);
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDrawing) toggleCell(e.clientX, e.clientY);
+        });
+
+        window.addEventListener('mouseup', () => isDrawing = false);
+
+        // Touch events (mobily)
+        canvas.addEventListener('touchstart', (e) => {
+            isDrawing = true;
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            const c = Math.floor((touch.clientX - rect.left) / CELL_SIZE);
+            const r = Math.floor((touch.clientY - rect.top) / CELL_SIZE);
+            if (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
+                drawMode = grid[r][c] ? 0 : 1;
+                grid[r][c] = drawMode;
+            }
+            toggleCell(touch.clientX, touch.clientY);
+        }, { passive: true });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (isDrawing && e.touches.length > 0) {
+                const touch = e.touches[0];
+                toggleCell(touch.clientX, touch.clientY);
+            }
+        }, { passive: true });
+
+        canvas.addEventListener('touchend', () => isDrawing = false);
+
+        // Controls
+        const startBtn = document.getElementById('startBtn');
+        startBtn.addEventListener('click', () => {
+            isRunning = !isRunning;
+            if (isRunning) {
+                startBtn.innerText = 'Pauza';
+                startBtn.classList.add('running');
+                intervalId = setInterval(computeNext, 100);
+            } else {
+                startBtn.innerText = 'Spustit';
+                startBtn.classList.remove('running');
+                clearInterval(intervalId);
+            }
+        });
+
+        document.getElementById('stepBtn').addEventListener('click', () => {
+            if (!isRunning) computeNext();
+        });
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
+            generation = 0;
+            if (isRunning) startBtn.click();
+            drawGrid();
+        });
+
+        document.getElementById('randomBtn').addEventListener('click', () => {
+            grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(null).map(() => Math.random() > 0.75 ? 1 : 0));
+            generation = 0;
+            drawGrid();
+        });
+
+        // Init
+        drawGrid();
+    </script>
+</body>
+</html>
+"""
+
+display(HTML(html_code))
